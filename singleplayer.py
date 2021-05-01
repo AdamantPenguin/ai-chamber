@@ -21,6 +21,7 @@ print("Loading, please wait...")  # it takes a while to load the AI
 from transformers import GPTNeoForCausalLM, GPT2Tokenizer
 import os
 import random
+import sys
 
 MODEL_NAME = 'EleutherAI/gpt-neo-125M'
 MODEL = GPTNeoForCausalLM.from_pretrained(MODEL_NAME)
@@ -39,8 +40,27 @@ HELP = f"""
 /rename <old> <new> - rename a character or object
 /safemode - toggle safe mode (censor things you might not want to see)
           | Safe mode is currently not implemented.
-/temperature - change the AI's 'inventiveness'
+/temperature <new_temperature> - change the AI's 'inventiveness'
 """.strip()
+
+# things that trigger death
+DEATH_KWS = [
+    "You die", "you die",
+    "You get killed", "you get killed",
+    "You got killed", "you got killed",
+    "You aren't alive", "you aren't alive",
+    "You are not alive", "you are not alive",
+    "You're dead", "you're dead",
+    "You are dead", "you are dead"
+]
+
+# things which trigger remembering
+IMPORTANT_KWS = [
+    "You are", "you are",
+    "You're", "you're",
+    "You have", "you have",
+    "You can", "you can"
+]
 
 
 # generation function for making text exist
@@ -77,6 +97,7 @@ def game():
     print("Enter the prompt text below:")
     text_history = input()
     # text_history = generate_text(text_history, temperature)  # initial generation
+    remember = text_history  # put the prompt in memory to keep it relevant
     clear()
     print(text_history)
 
@@ -116,7 +137,7 @@ def game():
             continue
 
         elif action.startswith("/temperature"):
-            new_temp = action.replace("/temperature", "").strip()
+            new_temp = float(action.replace("/temperature", "").strip())
             if new_temp < 0 or new_temp > 3:
                 print("[AIC] Temperature must be between 0 and 3")
                 continue
@@ -134,13 +155,31 @@ def game():
 
         # not commands (normal generation)
         text_history += " " + action
-        gen_input = remember + '\n' + text_history[-150:]  # provide 150 chars
+        gen_input = remember + '\n' + text_history[-100:]  # provide 100 chars
         generated = generate_text(gen_input, temperature)
         new_text = chop_sentences(
                 generated.replace(gen_input, '')
             ).strip()
         print(new_text)
         text_history += new_text
+
+        # death checking
+        for death_kw in DEATH_KWS:
+            if death_kw in new_text:
+                print("[AIC] Game over! You died.")
+                sys.exit()
+        
+        # auto-remember important things
+        for important_kw in IMPORTANT_KWS:
+            if important_kw in new_text:
+                important_start = new_text.find(important_kw)
+                important_end = new_text[important_start:].find(".")\
+                    + important_start + 1
+                new_remember = new_text[important_start:important_end]
+                remember += new_remember
+
+                # debugging
+                print(f"[AIC Debug] Auto-remembered '{new_remember}'.")
 
 
 if __name__ == '__main__':
