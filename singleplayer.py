@@ -36,6 +36,7 @@ HELP = f"""
 /help - show this help
 /remember <thing> - add something to memory
 /forget <thing> - remove something from memory
+/memory - view the memory
 /delete <thing> - erase something from the story
 /rename <old> <new> - rename a character or object
 /safemode - toggle safe mode (censor things you might not want to see)
@@ -48,10 +49,13 @@ DEATH_KWS = [
     "You die", "you die",
     "You get killed", "you get killed",
     "You got killed", "you got killed",
+    "You are killed", "you are killed",
     "You aren't alive", "you aren't alive",
     "You are not alive", "you are not alive",
     "You're dead", "you're dead",
-    "You are dead", "you are dead"
+    "You are dead", "you are dead",
+    "You have died", "you have died",
+    "You have been killed", "you have been killed"
 ]
 
 # things which trigger remembering
@@ -65,13 +69,13 @@ IMPORTANT_KWS = [
 
 # generation function for making text exist
 def generate_text(history, temp):
-    input_ids = TOKENIZER(history, return_tensors='pt')['input_ids']
-    hist_length = len(input_ids)
+    input_ids = TOKENIZER(history, return_tensors='pt').input_ids
+    hist_length = len(input_ids[0])
     gen_tokens = MODEL.generate(
         input_ids,
         do_sample=True,
         temperature=temp,
-        max_length=hist_length + 200,
+        max_length=hist_length + 50,
         pad_token_id=50256
     )
     gen_text = TOKENIZER.batch_decode(gen_tokens)[0]
@@ -148,20 +152,27 @@ def game():
         elif action.startswith("/help"):
             print(HELP)
             continue
+        elif action.startswith("/memory"):
+            print(remember)
+            continue
 
         elif action.startswith("/"):  # unrecognised command
             print("[AIC] Unknown command. Use /help for help.")
             continue
 
         # not commands (normal generation)
-        text_history += " " + action
+        text_history += " " + action + " "
+        text_history = text_history.replace('\n', ' ')
         gen_input = remember + '\n' + text_history[-100:]  # provide 100 chars
         generated = generate_text(gen_input, temperature)
         new_text = chop_sentences(
-                generated.replace(gen_input, '')
+                generated.replace(gen_input, '').replace('\n', ' ')
             ).strip()
-        print(new_text)
-        text_history += new_text
+        if new_text == ".":  # this is a bugbodge
+            print("[AIC] The AI couldn't think of anything to say.")
+        else:
+            print(new_text)
+            text_history += new_text
 
         # death checking
         for death_kw in DEATH_KWS:
@@ -176,7 +187,7 @@ def game():
                 important_end = new_text[important_start:].find(".")\
                     + important_start + 1
                 new_remember = new_text[important_start:important_end]
-                remember += new_remember
+                remember += ' ' + new_remember
 
                 # debugging
                 print(f"[AIC Debug] Auto-remembered '{new_remember}'.")
